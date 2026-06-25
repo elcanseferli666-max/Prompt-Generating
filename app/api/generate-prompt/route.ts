@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
+const GROQ_API_KEY = process.env.GROQ_API_KEY ?? "";
 
 const SYSTEM_INSTRUCTION =
   "You are an expert prompt engineer who writes structured prompts for Claude Code (an agentic AI coding assistant). Convert the developer's rough description into a single ready-to-paste Claude Code prompt with these sections: ## TASK (one clear line), ## CONTEXT (tech stack and files if mentioned), ## PROBLEM (precise description), ## REQUIREMENTS (numbered list), ## EXPECTED OUTCOME (what done looks like). Be direct and technical. No code blocks, no commentary outside the sections.";
@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
       taskType: string;
     };
 
-    if (!GEMINI_API_KEY) {
+    if (!GROQ_API_KEY) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY environment variable is not set." },
+        { error: "GROQ_API_KEY environment variable is not set." },
         { status: 500 }
       );
     }
@@ -46,34 +46,38 @@ export async function POST(req: NextRequest) {
       context && context.trim() ? `\n\nExtra Context:\n${context.trim()}` : ""
     }`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-          contents: [{ role: "user", parts: [{ text: userMessage }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
-        }),
-      }
-    );
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: SYSTEM_INSTRUCTION },
+          { role: "user", content: userMessage },
+        ],
+        temperature: 0.4,
+        max_tokens: 2048,
+      }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Gemini API error:", errorText);
+      console.error("Groq API error:", errorText);
       return NextResponse.json(
-        { error: "Gemini API request failed." },
+        { error: "API request failed. Check your GROQ_API_KEY." },
         { status: 502 }
       );
     }
 
     const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const text = data?.choices?.[0]?.message?.content ?? "";
 
     if (!text) {
       return NextResponse.json(
-        { error: "No output from Gemini API." },
+        { error: "No output from API." },
         { status: 502 }
       );
     }
